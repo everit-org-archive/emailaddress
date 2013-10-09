@@ -21,10 +21,6 @@ package org.everit.emailaddress.itests.core;
  * MA 02110-1301  USA
  */
 
-import java.io.IOException;
-
-import javax.mail.MessagingException;
-
 import org.junit.Test;
 
 /**
@@ -33,31 +29,42 @@ import org.junit.Test;
 public interface EmailAddressDataServiceTest {
 
     /**
-     * Testing creations methods.
+     * Save valid e-mails and try save invalid e-mail to the database. The saved e-mails to create a verification
+     * requests. Test the various errors (the null parameters (messageTemplate, tokenValidityEndDate,
+     * verificationLengthBase, emailAddress), invalid email address id, non positive verification length.
      */
     @Test
     void testCreations();
 
     /**
-     * Testing the invalideData an isVerifiedEmailAddress methods.
-     * 
-     * @throws IOException
-     *             when try to read the email body in the Greenmail.
-     * @throws MessagingException
-     *             when try to read the email body in the Greenmail.
+     * Test the wrong token UUID and null token and finally, verify the email address.
      */
     @Test
-    void testInvalidateDataAndIsVerifiedEmailAddress() throws IOException, MessagingException;
+    void testMissingVerifying();
 
     /**
-     * Testing verify email address method.
-     * 
-     * @throws IOException
-     *             when try to read the email body in the Greenmail.
-     * 
-     * @throws MessagingException
-     *             when try to read the email body in the Greenmail.
+     * Test the expired verification request. Expect always (verified (use the acceptToken or rejectToken), not verified
+     * ) the {@link ConfirmationResult#FAILED} result and the verified always to be false. Test wrong email address id's
+     * where expect the {@link NoSuchEmailAddressDataException}.
      */
     @Test
-    void testVerfifing() throws IOException, MessagingException;
+    void testVerificationAndInvalidatedOnExpiredVerificationEmails();
+
+    /**
+     * Test the not expired verification request. While not verified the email address obtained the verified to be false
+     * then when verified the request with the verifyToken it's obtained the {@link ConfirmationResult#SUCCESS} result
+     * and the verified to be true. If verified the rejectToken it's obtained the {@link ConfirmationResult#REJECTED}
+     * and the verified to be false. Test wrong email address id's where expect the
+     * {@link NoSuchEmailAddressDataException}.
+     */
+    @Test
+    void testVerificationAndInvalidatedOnNotExpiredVerificationEmails();
+
+    /**
+     * Test the only saved the email addresses in the database. Expect to the the verified to be false and successful
+     * invalidate the email address data. Furthermore test the verified errors and invalidate errors. Test wrong email
+     * address id's where expect the {@link NoSuchEmailAddressDataException}.
+     */
+    @Test
+    void testVerificationAndInvalidatedOnSavedEmails();
 }

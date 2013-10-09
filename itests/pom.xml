@@ -35,14 +35,14 @@
     <groupId>org.everit.emailaddress</groupId>
     <artifactId>itests</artifactId>
     <packaging>pom</packaging>
-    
+
     <name>Everit emailaddress Tests</name>
     <description>Integration tests of Everit emailaddress.</description>
-    
+
     <modules>
-		<module>config</module>
+        <module>config</module>
         <module>core</module>
-    </modules>
+    </modules>  
 
     <!-- Repeating the repository definitions to let people check out this sample separately -->
     <repositories>
