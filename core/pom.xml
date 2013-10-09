@@ -49,8 +49,6 @@
                     <instructions>
                         <Bundle-SymbolicName>${project.artifactId}</Bundle-SymbolicName>
                         <Import-Package>
-<!--                             org.everit.serviceutil.core, -->
-<!-- org.apache.velocity.context, -->
                             *
                         </Import-Package>
                         <Export-Package></Export-Package>

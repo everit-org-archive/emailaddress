@@ -32,6 +32,7 @@ import javax.persistence.EntityManager;
 import javax.persistence.LockModeType;
 import javax.persistence.criteria.CriteriaBuilder;
 import javax.persistence.criteria.CriteriaQuery;
+import javax.persistence.criteria.Join;
 import javax.persistence.criteria.Predicate;
 import javax.persistence.criteria.Root;
 
@@ -40,8 +41,8 @@ import org.everit.email.api.EmailService;
 import org.everit.emailaddress.api.EmailAddressDataService;
 import org.everit.emailaddress.api.dto.EmailVerificationResult;
 import org.everit.emailaddress.api.enums.ConfirmationResult;
-import org.everit.emailaddress.api.expections.InvalidEmailAddressExpection;
-import org.everit.emailaddress.api.expections.NoSuchEmailAddressDataException;
+import org.everit.emailaddress.api.exceptions.InvalidEmailAddressException;
+import org.everit.emailaddress.api.exceptions.NoSuchEmailAddressDataException;
 import org.everit.emailaddress.entity.EmailAddressDataEntity;
 import org.everit.emailaddress.entity.EmailAddressDataEntity_;
 import org.everit.messaging.api.dto.MessagePart;
@@ -56,6 +57,7 @@ import org.everit.verifiabledata.api.enums.TokenUsageResult;
 import org.everit.verifiabledata.api.enums.VerificationLengthBase;
 import org.everit.verifiabledata.api.exceptions.NonPositiveVerificationLength;
 import org.everit.verifiabledata.entity.VerifiableDataEntity;
+import org.everit.verifiabledata.entity.VerifiableDataEntity_;
 
 /**
  * Implementation of {@link EmailAddressDataService}.
@@ -87,68 +89,46 @@ public class EmailAddressDataServiceImpl implements EmailAddressDataService {
     public void createVerificationRequest(final long emailAddressId, final String messageTemplate,
             final Date tokenValidityEndDate,
             final long verificationLength, final VerificationLengthBase verificationLengthBase) {
-        EmailAddressDataEntity emailAddressDataEntity = findEmailAddressDataEntityById(emailAddressId);
         if ((tokenValidityEndDate == null) || (verificationLengthBase == null) || (messageTemplate == null)) {
             throw new IllegalArgumentException(
                     "The tokenValidityEndDate or verificationLengthBase or messageTemplate parameter is null. "
                             + "Cannot be null.");
-        } else if (verificationLength <= 0.0) {
+        }
+
+        if (verificationLength <= 0.0) {
             throw new NonPositiveVerificationLength();
-        } else if (emailAddressDataEntity == null) {
+        }
+
+        if (!existEmailAddressData(emailAddressId)) {
             throw new NoSuchEmailAddressDataException();
+        }
+
+        EmailAddressDataEntity emailAddressDataEntity = findEmailAddressDataEntityById(emailAddressId);
+        if (emailAddressDataEntity.getVerifiableData() != null) {
+            VerificationRequest verificationRequest = verifyService.createVerificationRequest(
+                    emailAddressDataEntity.getVerifiableData().getVerifiableDataId(),
+                    tokenValidityEndDate,
+                    verificationLength,
+                    verificationLengthBase);
+            if (verificationRequest != null) {
+                sendEmail(emailAddressDataEntity.getEmailAddress(),
+                        verificationRequest.getVerifyTokenUUID(),
+                        verificationRequest.getRejectTokenUUID(),
+                        messageTemplate);
+            }
         } else {
-            if (emailAddressDataEntity.getVerifiableData() != null) {
-                VerificationRequest verificationRequest = verifyService.createVerificationRequest(
-                        emailAddressDataEntity.getVerifiableData().getVerifiableDataId(),
-                        tokenValidityEndDate,
-                        verificationLength,
-                        verificationLengthBase);
-                if (verificationRequest != null) {
-                    Map<String, String> senderParams = new HashMap<String, String>();
-                    senderParams.put(EmailSenderParam.EMAIL_ADDRESS, "localhost@localhost.hu");
-                    MessageTenureParam sender = MessageTenureParam.createSender(0L, senderParams);
+            VerifiableDataCreation createVerifiableData = verifyService.createVerifiableData(tokenValidityEndDate,
+                    verificationLength, verificationLengthBase);
+            if (createVerifiableData != null) {
+                emailAddressDataEntity.setVerifiableData(em.getReference(VerifiableDataEntity.class,
+                        createVerifiableData.getVerifiableDataId()));
+                em.merge(emailAddressDataEntity);
+                em.flush();
 
-                    Map<String, String> receiverParams = new HashMap<String, String>();
-                    receiverParams.put(EmailSenderParam.EMAIL_ADDRESS, emailAddressDataEntity.getEmailAddress());
-                    MessageTenureParam reciver = MessageTenureParam.createReceiver(TenureType.TO, 0L, receiverParams);
-
-                    Map<String, Object> variables = new HashMap<String, Object>();
-                    variables.put("acceptToken", verificationRequest.getVerifyTokenUUID());
-                    variables.put("rejectToken", verificationRequest.getRejectTokenUUID());
-
-                    String emailBody = VelocityUtil.processVelocityTemplateFromString(messageTemplate, "ERROR",
-                            variables);
-                    MessagePart[] messageParts = new MessagePart[] { MessagePart.createInlineHtml(emailBody) };
-
-                    emailService.sendMessage(sender, "Verification email", messageParts, null, reciver);
-                }
-            } else {
-                VerifiableDataCreation createVerifiableData = verifyService.createVerifiableData(tokenValidityEndDate,
-                        verificationLength, verificationLengthBase);
-                if (createVerifiableData != null) {
-                    emailAddressDataEntity.setVerifiableData(em.getReference(VerifiableDataEntity.class,
-                            createVerifiableData.getVerifiableDataId()));
-                    em.merge(emailAddressDataEntity);
-                    em.flush();
-
-                    Map<String, String> senderParams = new HashMap<String, String>();
-                    senderParams.put(EmailSenderParam.EMAIL_ADDRESS, "localhost@localhost.hu");
-                    MessageTenureParam sender = MessageTenureParam.createSender(0L, senderParams);
-
-                    Map<String, String> receiverParams = new HashMap<String, String>();
-                    receiverParams.put(EmailSenderParam.EMAIL_ADDRESS, emailAddressDataEntity.getEmailAddress());
-                    MessageTenureParam reciver = MessageTenureParam.createReceiver(TenureType.TO, 0L, receiverParams);
-
-                    Map<String, Object> variables = new HashMap<String, Object>();
-                    variables.put("acceptToken", createVerifiableData.getVerificationRequest().getVerifyTokenUUID());
-                    variables.put("rejectToken", createVerifiableData.getVerificationRequest().getRejectTokenUUID());
-
-                    String emailBody = VelocityUtil.processVelocityTemplateFromString(messageTemplate, "ERROR",
-                            variables);
-                    MessagePart[] messageParts = new MessagePart[] { MessagePart.createInlineHtml(emailBody) };
-
-                    emailService.sendMessage(sender, "Verification email", messageParts, null, reciver);
-                }
+                sendEmail(emailAddressDataEntity.getEmailAddress(),
+                        createVerifiableData.getVerificationRequest().getVerifyTokenUUID(),
+                        createVerifiableData.getVerificationRequest().getRejectTokenUUID(),
+                        messageTemplate);
             }
         }
 
@@ -174,6 +154,21 @@ public class EmailAddressDataServiceImpl implements EmailAddressDataService {
     }
 
     /**
+     * Checks the email address data is exist or not.
+     * 
+     * @param emailAddressId
+     *            the id of the email address.
+     * @return <code>true</code> if exist, otherwise <code>false</code>.
+     */
+    private boolean existEmailAddressData(final long emailAddressId) {
+        String emailAddressByEmailAddressId = getEmailAddressByEmailAddressId(emailAddressId);
+        if (emailAddressByEmailAddressId != null) {
+            return true;
+        }
+        return false;
+    }
+
+    /**
      * Finds email address data in the database.
      * 
      * @param emailAddressId
@@ -185,52 +180,130 @@ public class EmailAddressDataServiceImpl implements EmailAddressDataService {
     }
 
     /**
-     * Finds the email address data bases on verifiable data.
+     * Get email address based on email address id.
+     * 
+     * @param emailAddressId
+     *            the id of the email address.
+     * @return the email address. If not exist email address data return <code>null</code>.
+     */
+    private String getEmailAddressByEmailAddressId(final long emailAddressId) {
+        CriteriaBuilder cb = em.getCriteriaBuilder();
+        CriteriaQuery<String> criteriaQuery = cb.createQuery(String.class);
+
+        Root<EmailAddressDataEntity> root =
+                criteriaQuery.from(EmailAddressDataEntity.class);
+
+        criteriaQuery.select(root.get(EmailAddressDataEntity_.emailAddress));
+
+        Predicate predicate = cb.equal(root.get(EmailAddressDataEntity_.emailAddressDataId), emailAddressId);
+
+        criteriaQuery.where(predicate);
+        List<String> resultList = em.createQuery(criteriaQuery).getResultList();
+        if (resultList.size() == 1) {
+            return resultList.get(0);
+        }
+        return null;
+    }
+
+    /**
+     * Get email address id based on verifiable data id.
      * 
      * @param verifiableDataId
      *            the id of the verifiable data.
-     * @return the {@link EmailAddressDataEntity} object if only exist one, otherwise <code>null</code>.
+     * @return the email address id if exist, otherwise return <code>null</code>.
      */
-    private EmailAddressDataEntity findEmailAddressDataEntityByVerifiableDataId(final long verifiableDataId) {
-        EmailAddressDataEntity result = null;
+    private Long getEmailAddressIdByVerifiableDataId(final long verifiableDataId) {
         CriteriaBuilder cb = em.getCriteriaBuilder();
-        CriteriaQuery<EmailAddressDataEntity> criteriaQuery = cb.createQuery(EmailAddressDataEntity.class);
-        Root<EmailAddressDataEntity> root = criteriaQuery
-                .from(EmailAddressDataEntity.class);
+        CriteriaQuery<Long> criteriaQuery = cb.createQuery(Long.class);
+
+        Root<EmailAddressDataEntity> root =
+                criteriaQuery.from(EmailAddressDataEntity.class);
+
+        criteriaQuery.select(root.get(EmailAddressDataEntity_.emailAddressDataId));
+
         Predicate predicate = cb.equal(root.get(EmailAddressDataEntity_.verifiableData),
                 em.getReference(VerifiableDataEntity.class, verifiableDataId));
+
         criteriaQuery.where(predicate);
-        List<EmailAddressDataEntity> list = em.createQuery(criteriaQuery).getResultList();
-        if (list.size() == 1) {
-            result = list.get(0);
+        List<Long> resultList = em.createQuery(criteriaQuery).getResultList();
+        if (resultList.size() == 1) {
+            return resultList.get(0);
         }
-        return result;
+        return null;
+    }
+
+    /**
+     * Get the verifiable data id based on email address id.
+     * 
+     * @param emailAddressId
+     *            the id of the email address data.
+     * @return the verifiable data if exist, otherwise return <code>null</code>.
+     */
+    private Long getVerifiableDataIdByEmailAddressId(final long emailAddressId) {
+        CriteriaBuilder cb = em.getCriteriaBuilder();
+        CriteriaQuery<Long> criteriaQuery = cb.createQuery(Long.class);
+        Root<EmailAddressDataEntity> root =
+                criteriaQuery.from(EmailAddressDataEntity.class);
+        Join<EmailAddressDataEntity, VerifiableDataEntity> vde =
+                root.join(EmailAddressDataEntity_.verifiableData);
+        criteriaQuery.select(vde.get(VerifiableDataEntity_.verifiableDataId));
+        Predicate predicate = cb.equal(root.get(EmailAddressDataEntity_.emailAddressDataId), emailAddressId);
+        criteriaQuery.where(predicate);
+        List<Long> resultList = em.createQuery(criteriaQuery).getResultList();
+        if (resultList.size() == 1) {
+            return resultList.get(0);
+        }
+        return null;
+    }
+
+    /**
+     * Get the verification end date based on email address data id.
+     * 
+     * @param emailAddressId
+     *            the id of the email address data.
+     * @return the verification end date. If no result return <code>null</code>. <b>Important</b> the verification end
+     *         date itself may be <code>null</code>.
+     */
+    private Date getVerificationEndDateByEmailAddressId(final long emailAddressId) {
+        CriteriaBuilder cb = em.getCriteriaBuilder();
+        CriteriaQuery<Date> criteriaQuery = cb.createQuery(Date.class);
+        Root<EmailAddressDataEntity> root =
+                criteriaQuery.from(EmailAddressDataEntity.class);
+        Join<EmailAddressDataEntity, VerifiableDataEntity> vde =
+                root.join(EmailAddressDataEntity_.verifiableData);
+        criteriaQuery.select(vde.get(VerifiableDataEntity_.verifiedUntil));
+        Predicate predicate = cb.equal(root.get(EmailAddressDataEntity_.emailAddressDataId), emailAddressId);
+        criteriaQuery.where(predicate);
+        List<Date> resultList = em.createQuery(criteriaQuery).getResultList();
+        if (resultList.size() == 1) {
+            return resultList.get(0);
+        }
+        return null;
     }
 
     @Override
     public void invalidateEmailAddress(final long emailAddressId) {
-        EmailAddressDataEntity emailAddressDataEntity = findEmailAddressDataEntityById(emailAddressId);
-        if (emailAddressDataEntity == null) {
+        if (!existEmailAddressData(emailAddressId)) {
             throw new NoSuchEmailAddressDataException();
         }
-        if (emailAddressDataEntity.getVerifiableData() != null) {
-            em.lock(emailAddressDataEntity.getVerifiableData(), LockModeType.PESSIMISTIC_WRITE);
-            verifyService.invalidateData(emailAddressDataEntity.getVerifiableData().getVerifiableDataId());
+        Long verifiableDataId = getVerifiableDataIdByEmailAddressId(emailAddressId);
+        if (verifiableDataId != null) {
+            em.lock(em.getReference(VerifiableDataEntity.class, verifiableDataId), LockModeType.PESSIMISTIC_WRITE);
+            verifyService.invalidateData(verifiableDataId);
         }
-        em.remove(emailAddressDataEntity);
+        em.remove(em.getReference(EmailAddressDataEntity.class, emailAddressId));
     }
 
     @Override
     public boolean isEmailAddressVerified(final long emailAddressId) {
         boolean result = false;
-        EmailAddressDataEntity emailAddressDataEntity = findEmailAddressDataEntityById(emailAddressId);
-        if (emailAddressDataEntity == null) {
+        if (!existEmailAddressData(emailAddressId)) {
             throw new NoSuchEmailAddressDataException();
         }
-        VerifiableDataEntity verifiableData = emailAddressDataEntity.getVerifiableData();
+        Date verificationEndByEmailAddressId = getVerificationEndDateByEmailAddressId(emailAddressId);
         Date actualDate = new Date();
-        if ((verifiableData != null) && (verifiableData.getVerifiedUntil() != null)
-                && (actualDate.getTime() < verifiableData.getVerifiedUntil().getTime())) {
+        if ((verificationEndByEmailAddressId != null)
+                && (actualDate.getTime() < verificationEndByEmailAddressId.getTime())) {
             result = true;
         }
         return result;
@@ -249,9 +322,43 @@ public class EmailAddressDataServiceImpl implements EmailAddressDataService {
             em.flush();
             result = emailAddressDataEntity.getEmailAddressDataId();
         } else {
-            throw new InvalidEmailAddressExpection();
+            throw new InvalidEmailAddressException();
         }
         return result;
+    }
+
+    /**
+     * Sending email which contains the tokens.
+     * 
+     * @param receiverEmailAddress
+     *            the receiver email address.
+     * @param verifyToken
+     *            the verify token.
+     * @param rejectToken
+     *            the reject token.
+     * @param messageTemplate
+     *            the message template. Replacing the $rejectToken variable the reject token and $acceptToken variable
+     *            the accept token.
+     */
+    private void sendEmail(final String receiverEmailAddress, final String verifyToken, final String rejectToken,
+            final String messageTemplate) {
+        Map<String, String> senderParams = new HashMap<String, String>();
+        senderParams.put(EmailSenderParam.EMAIL_ADDRESS, "localhost@localhost.hu");
+        MessageTenureParam sender = MessageTenureParam.createSender(0L, senderParams);
+
+        Map<String, String> receiverParams = new HashMap<String, String>();
+        receiverParams.put(EmailSenderParam.EMAIL_ADDRESS, receiverEmailAddress);
+        MessageTenureParam reciver = MessageTenureParam.createReceiver(TenureType.TO, 0L, receiverParams);
+
+        Map<String, Object> variables = new HashMap<String, Object>();
+        variables.put("acceptToken", verifyToken);
+        variables.put("rejectToken", rejectToken);
+
+        String emailBody = VelocityUtil.processVelocityTemplateFromString(messageTemplate, "ERROR",
+                variables);
+        MessagePart[] messageParts = new MessagePart[] { MessagePart.createInlineHtml(emailBody) };
+
+        emailService.sendMessage(sender, "Verification email", messageParts, null, reciver);
     }
 
     public void setEm(final EntityManager em) {
@@ -287,10 +394,9 @@ public class EmailAddressDataServiceImpl implements EmailAddressDataService {
         EmailVerificationResult result = null;
         VerificationResult verifyData = verifyService.verifyData(tokenUUID);
         if (verifyData != null) {
-            EmailAddressDataEntity entity = findEmailAddressDataEntityByVerifiableDataId(verifyData
-                    .getVerifiableDataId());
-            if (entity != null) {
-                result = new EmailVerificationResult(entity.getEmailAddressDataId(),
+            Long emailAddressId = getEmailAddressIdByVerifiableDataId(verifyData.getVerifiableDataId());
+            if (emailAddressId != null) {
+                result = new EmailVerificationResult(emailAddressId,
                         determineConfirmationResult(verifyData.getTokenUsageResult()));
             } else {
                 result = new EmailVerificationResult(null, ConfirmationResult.FAILED);

@@ -1,4 +1,4 @@
-package org.everit.emailaddress.api.expections;
+package org.everit.emailaddress.api.exceptions;
 
 /*
  * Copyright (c) 2011, Everit Kft.
@@ -24,17 +24,17 @@ package org.everit.emailaddress.api.expections;
 /**
  * InvalidEmailAddressExpection is throw when the email address is invalid.
  */
-public class NoSuchEmailAddressDataException extends RuntimeException {
+public class InvalidEmailAddressException extends RuntimeException {
 
     /**
      * Generated serial version UUID.
      */
-    private static final long serialVersionUID = -7635725854411505341L;
+    private static final long serialVersionUID = -763572585446505341L;
 
     /**
      * The default constructor.
      */
-    public NoSuchEmailAddressDataException() {
-        super("Not exist the email address data");
+    public InvalidEmailAddressException() {
+        super("The email address is invalid.");
     }
 }

@@ -38,8 +38,8 @@ import junit.framework.Assert;
 import org.everit.emailaddress.api.EmailAddressDataService;
 import org.everit.emailaddress.api.dto.EmailVerificationResult;
 import org.everit.emailaddress.api.enums.ConfirmationResult;
-import org.everit.emailaddress.api.expections.InvalidEmailAddressExpection;
-import org.everit.emailaddress.api.expections.NoSuchEmailAddressDataException;
+import org.everit.emailaddress.api.exceptions.InvalidEmailAddressException;
+import org.everit.emailaddress.api.exceptions.NoSuchEmailAddressDataException;
 import org.everit.util.core.mail.greenmail.GreenmailService;
 import org.everit.verifiabledata.api.enums.VerificationLengthBase;
 import org.everit.verifiabledata.api.exceptions.NonPositiveVerificationLength;
@@ -118,7 +118,7 @@ public class EmailAddressDataServiceTestImpl implements EmailAddressDataServiceT
             try {
                 emailAddressDataService.saveEmailAddress(email);
                 Assert.assertFalse(true);
-            } catch (InvalidEmailAddressExpection e) {
+            } catch (InvalidEmailAddressException e) {
                 Assert.assertNotNull(e);
             }
         }

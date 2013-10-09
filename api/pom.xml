@@ -55,7 +55,7 @@
                             ${project.artifactId},
                             ${project.artifactId}.dto,
                             ${project.artifactId}.enums,
-                            ${project.artifactId}.expections
+                            ${project.artifactId}.exceptions
                         </Export-Package>
                     </instructions>
                 </configuration>

@@ -89,7 +89,7 @@ public interface EmailAddressDataService {
      * 
      * @throws IllegalArgumentException
      *             if the emailAddress parameter is <code>null</code>.
-     * @throws InvalidEmailAddressExpection
+     * @throws InvalidEmailAddressException
      *             if the email address is invalid.
      */
     long saveEmailAddress(String emailAddress);
