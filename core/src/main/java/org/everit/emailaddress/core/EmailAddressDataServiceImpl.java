@@ -123,7 +123,6 @@ public class EmailAddressDataServiceImpl implements EmailAddressDataService {
                 emailAddressDataEntity.setVerifiableData(em.getReference(VerifiableDataEntity.class,
                         createVerifiableData.getVerifiableDataId()));
                 em.merge(emailAddressDataEntity);
-                em.flush();
 
                 sendEmail(emailAddressDataEntity.getEmailAddress(),
                         createVerifiableData.getVerificationRequest().getVerifyTokenUUID(),
@@ -131,6 +130,7 @@ public class EmailAddressDataServiceImpl implements EmailAddressDataService {
                         messageTemplate);
             }
         }
+        em.flush();
 
     }
 

@@ -249,17 +249,17 @@ public class EmailAddressDataServiceTestImpl implements EmailAddressDataServiceT
         Date date = new Date();
         Calendar c = Calendar.getInstance();
         c.setTime(date);
-        c.add(Calendar.MILLISECOND, 500);
+        c.add(Calendar.MILLISECOND, 300);
         emailAddressDataService.createVerificationRequest(emailAddressId,
-                "$acceptToken\n$rejectToken", c.getTime(), random.nextInt(MAX_RANDOM_VALUE) + 1,
+                "$acceptToken\n$rejectToken", c.getTime(), 1L,
                 getRandomVerificationLengthBase());
         massageNumber++;
 
+        getLastEmailBody(Arrays.asList(greenmailService.getGreenMail().getReceivedMessages()));
         try {
             emailAddressDataService.createVerificationRequest(emailAddressId,
-                    "", c.getTime(), random.nextInt(MAX_RANDOM_VALUE) + 1,
+                    "$acceptToken\n$rejectToken", c.getTime(), random.nextInt(MAX_RANDOM_VALUE) + 1,
                     getRandomVerificationLengthBase());
-            Assert.assertTrue(true);
             massageNumber++;
         } catch (IllegalArgumentException e) {
             Assert.assertNull(e);
@@ -393,22 +393,19 @@ public class EmailAddressDataServiceTestImpl implements EmailAddressDataServiceT
     private void internalTestVerifyEmailAddressWithExpiredEmailAddresses(final List<String> expiredEmailBodies) {
         boolean change = true;
         for (String emailBody : expiredEmailBodies) {
-            String[] splitEmailBody = emailBody.split("\\n");
+            String[] splitEmailBody = emailBody.split("\n");
+            EmailVerificationResult verifyEmailAddress = null;
             if (change) {
-                EmailVerificationResult verifyEmailAddress = emailAddressDataService
+                verifyEmailAddress = emailAddressDataService
                         .verifyEmailAddress(splitEmailBody[0].replace("\n", "").replace("\r", ""));
-                Assert.assertNotNull(verifyEmailAddress);
-                Assert.assertEquals(ConfirmationResult.FAILED, verifyEmailAddress.getResult());
-                Assert.assertNull(verifyEmailAddress.getEmailAddressId());
-                change = !change;
             } else {
-                EmailVerificationResult verifyEmailAddress = emailAddressDataService
+                verifyEmailAddress = emailAddressDataService
                         .verifyEmailAddress(splitEmailBody[1].replace("\n", "").replace("\r", ""));
-                Assert.assertNotNull(verifyEmailAddress);
-                Assert.assertEquals(ConfirmationResult.FAILED, verifyEmailAddress.getResult());
-                Assert.assertNull(verifyEmailAddress.getEmailAddressId());
-                change = !change;
+
             }
+            Assert.assertNotNull(verifyEmailAddress);
+            Assert.assertEquals(ConfirmationResult.FAILED, verifyEmailAddress.getResult());
+            change = !change;
         }
     }
 
@@ -486,7 +483,7 @@ public class EmailAddressDataServiceTestImpl implements EmailAddressDataServiceT
 
             receivedMessagesList = Arrays.asList(receivedMessages);
             String emailBody = getLastEmailBody(receivedMessagesList);
-            String[] splitEmailBody = emailBody.split("\\n");
+            String[] splitEmailBody = emailBody.split("\n");
             verifyEmailAddress = emailAddressDataService
                     .verifyEmailAddress(splitEmailBody[0].replace("\n", "").replace("\r", ""));
             Assert.assertNotNull(verifyEmailAddress);
@@ -501,6 +498,17 @@ public class EmailAddressDataServiceTestImpl implements EmailAddressDataServiceT
         List<Long> createEmailAddressToExpired = createEmailAddressToExpired();
         List<String> expiredEmailBodies = getExpiredEmailBodiesWhenCreateVerificationRequest(
                 createEmailAddressToExpired);
+        // Wait methods.
+        createEmailAddress();
+        createEmailAddressToExpired();
+        createEmailAddressToNotExpired();
+        createEmailAddress();
+        createEmailAddressToExpired();
+        createEmailAddressToNotExpired();
+        createEmailAddress();
+        createEmailAddressToExpired();
+        createEmailAddressToNotExpired();
+
         internalTestVerifyEmailAddressWithExpiredEmailAddresses(expiredEmailBodies);
         for (Long emailAddressId : createEmailAddressToExpired) {
             internalTestInvalidateEmailAddressAndIsEmailAddressVerifiedErrors(emailAddressId);
@@ -526,7 +534,7 @@ public class EmailAddressDataServiceTestImpl implements EmailAddressDataServiceT
 
             receivedMessagesList = Arrays.asList(receivedMessages);
             String emailBody = getLastEmailBody(receivedMessagesList);
-            String[] splitEmailBody = emailBody.split("\\n");
+            String[] splitEmailBody = emailBody.split("\n");
             if (change) {
                 EmailVerificationResult verifyEmailAddress = emailAddressDataService
                         .verifyEmailAddress(splitEmailBody[0].replace("\n", "").replace("\r", ""));
